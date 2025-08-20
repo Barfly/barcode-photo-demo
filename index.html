@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Caméra & Galerie Demo</title>
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+</head>
+<body style="font-family: sans-serif; text-align: center; padding: 20px;">
+  <h1>📷 Démo Caméra, Galerie & Code-barres</h1>
+
+  <!-- Accès caméra -->
+  <button id="startCamera">Activer la caméra</button>
+  <video id="video" autoplay playsinline style="display: none; width: 100%; max-width: 400px; margin-top: 20px;"></video>
+  <br>
+  <button id="takePhoto" style="display: none;">Prendre une photo</button>
+  <canvas id="canvas" style="display: none; margin-top: 20px;"></canvas>
+
+  <h2 style="margin-top: 30px;">📦 Scan de code-barres</h2>
+  <div id="barcodeResult" style="font-weight: bold; margin-top: 10px;"></div>
+  <button id="saveBarcode" style="display: none; margin-top: 10px;">✅ Sauvegarder ce code-barres</button>
+  <div id="confirmedBarcode" style="margin-top: 10px; color: green;"></div>
+
+  <hr style="margin: 40px 0;">
+
+  <!-- Sélecteur de fichiers -->
+  <h2>🖼️ Sélectionner des photos</h2>
+  <input type="file" accept="image/*" multiple id="fileInput" />
+  <div id="preview" style="margin-top: 20px;"></div>
+  <button id="uploadPhotos" style="margin-top: 20px;">📤 Uploader les photos</button>
+  <div id="uploadStatus" style="margin-top: 10px;"></div>
+
+  <script>
+    const startCameraBtn = document.getElementById('startCamera');
+    const takePhotoBtn = document.getElementById('takePhoto');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const barcodeResult = document.getElementById('barcodeResult');
+    const saveBarcodeBtn = document.getElementById('saveBarcode');
+    const confirmedBarcode = document.getElementById('confirmedBarcode');
+    const uploadBtn = document.getElementById('uploadPhotos');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const fileInput = document.getElementById('fileInput');
+    let savedBarcode = null;
+
+    const codeReader = new ZXing.BrowserMultiFormatReader();
+
+    startCameraBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      video.srcObject = stream;
+      video.style.display = 'block';
+      takePhotoBtn.style.display = 'inline-block';
+
+      codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
+        if (result) {
+          barcodeResult.textContent = `📦 Code détecté : ${result.getText()}`;
+          saveBarcodeBtn.style.display = 'inline-block';
+          saveBarcodeBtn.dataset.value = result.getText();
+        }
+      });
+    };
+
+    saveBarcodeBtn.onclick = () => {
+      savedBarcode = saveBarcodeBtn.dataset.value;
+      confirmedBarcode.textContent = `✅ Code-barres sauvegardé : ${savedBarcode}`;
+      saveBarcodeBtn.style.display = 'none';
+    };
+
+    takePhotoBtn.onclick = () => {
+      const context = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
+      canvas.style.display = 'block';
+    };
+
+    document.querySelector('input[type=file]').addEventListener('change', (e) => {
+      const files = e.target.files;
+      const preview = document.getElementById('preview');
+      preview.innerHTML = '';
+      Array.from(files).forEach(file => {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.style.maxWidth = '150px';
+        img.style.margin = '10px';
+        preview.appendChild(img);
+      });
+    });
+
+    uploadBtn.onclick = () => {
+      if (!savedBarcode) {
+        alert('Veuillez sauvegarder un code-barres avant d'uploader les photos.');
+        return;
+      }
+      const files = fileInput.files;
+      if (!files.length) {
+        alert('Veuillez sélectionner des fichiers à uploader.');
+        return;
+      }
+
+      const uploadPromises = Array.from(files).map((file, index) => {
+        const filename = `${savedBarcode}_photos_${index + 1}${file.name.slice(file.name.lastIndexOf('.'))}`;
+        const formData = new FormData();
+        formData.append('file', file, filename);
+
+        return fetch('https://httpbin.org/post', {
+          method: 'POST',
+          body: formData
+        }).then(response => response.json());
+      });
+
+      uploadStatus.textContent = '⏳ Upload en cours...';
+      Promise.all(uploadPromises).then(results => {
+        uploadStatus.textContent = `✅ ${results.length} fichier(s) uploadé(s) avec succès.`;
+        console.log(results);
+      }).catch(err => {
+        uploadStatus.textContent = `❌ Erreur lors de l'upload.`;
+        console.error(err);
+      });
+    };
+  </script>
+</body>
+</html>
